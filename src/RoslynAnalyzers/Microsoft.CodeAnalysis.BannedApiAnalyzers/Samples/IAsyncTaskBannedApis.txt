@@ -1,0 +1,20 @@
+# IAsyncTask ExecuteAsync Banned APIs
+# This file contains APIs that are banned only within IAsyncTask.ExecuteAsync() implementations
+
+# Console APIs - use structured logging instead
+M:System.Console.WriteLine(System.String);Use ILogger instead
+M:System.Console.Write(System.String);Use ILogger instead  
+M:System.Console.WriteLine();Use ILogger instead
+
+# File.ReadAllText - use async versions
+M:System.IO.File.ReadAllText(System.String);Use File.ReadAllTextAsync instead
+M:System.IO.File.ReadAllLines(System.String);Use File.ReadAllLinesAsync instead
+M:System.IO.File.WriteAllText(System.String,System.String);Use File.WriteAllTextAsync instead
+
+# Thread.Sleep - don't block in async methods
+M:System.Threading.Thread.Sleep(System.Int32);Use Task.Delay instead in async methods
+M:System.Threading.Thread.Sleep(System.TimeSpan);Use Task.Delay instead in async methods
+
+# HttpWebRequest - use HttpClient instead
+T:System.Net.HttpWebRequest;Use HttpClient for async HTTP operations
+M:System.Net.WebRequest.Create(System.String);Use HttpClient instead
