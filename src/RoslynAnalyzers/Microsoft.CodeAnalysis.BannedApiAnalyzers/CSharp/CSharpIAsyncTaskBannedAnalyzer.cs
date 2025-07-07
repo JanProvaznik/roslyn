@@ -24,6 +24,10 @@ namespace Microsoft.CodeAnalysis.CSharp.BannedApiAnalyzers
 
         protected override IEnumerable<SyntaxNode> GetTypeSyntaxNodesFromBaseType(SyntaxNode syntaxNode) => ((BaseListSyntax)syntaxNode).Types.Select(t => (SyntaxNode)t.Type);
 
-        protected override bool IsMethodDeclaration(SyntaxNode node) => node is MethodDeclarationSyntax;
+        protected override bool IsTypeDeclaration(SyntaxNode node) =>
+            node is ClassDeclarationSyntax ||
+            node is StructDeclarationSyntax ||
+            node is RecordDeclarationSyntax ||
+            node is InterfaceDeclarationSyntax;
     }
 }

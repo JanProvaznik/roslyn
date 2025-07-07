@@ -25,17 +25,16 @@ namespace Microsoft.CodeAnalysis.BannedApiAnalyzers
         where TSyntaxKind : struct
     {
         private const string IAsyncTaskInterfaceName = "Microsoft.Build.Framework.IAsyncTask";
-        private const string ExecuteAsyncMethodName = "ExecuteAsync";
         private const string ConfigFileName = "IAsyncTaskBannedApis.txt";
 
         public static readonly DiagnosticDescriptor IAsyncTaskSymbolIsBannedRule = new(
             id: "RS0036", // Using a new ID for the POC
             title: CreateLocalizableResourceString(nameof(SymbolIsBannedTitle)),
-            messageFormat: "Symbol '{0}' is banned in IAsyncTask.ExecuteAsync() implementations{1}",
+            messageFormat: "Symbol '{0}' is banned in IAsyncTask implementations{1}",
             category: "ApiDesign",
             defaultSeverity: DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
-            description: "This symbol is banned when used within IAsyncTask.ExecuteAsync() method implementations.",
+            description: "This symbol is banned when used within types that implement IAsyncTask.",
             helpLinkUri: "https://github.com/dotnet/roslyn/blob/main/src/RoslynAnalyzers/Microsoft.CodeAnalysis.BannedApiAnalyzers/BannedApiAnalyzers.Help.md",
             customTags: WellKnownDiagnosticTagsExtensions.Telemetry);
 
@@ -128,9 +127,9 @@ namespace Microsoft.CodeAnalysis.BannedApiAnalyzers
             OperationAnalysisContext context,
             Dictionary<(string ContainerName, string SymbolName), ImmutableArray<BanFileEntry>> bannedApis)
         {
-            // First check if we're in an ExecuteAsync implementation by looking at the containing method
-            var containingMethod = GetContainingMethod(context.Operation);
-            if (containingMethod == null || !IsExecuteAsyncImplementation(containingMethod))
+            // Check if we're in a class that implements IAsyncTask
+            var containingType = GetContainingType(context.Operation);
+            if (containingType == null || !IsIAsyncTaskImplementation(containingType))
                 return;
 
             // Now analyze the operation as usual
@@ -199,21 +198,21 @@ namespace Microsoft.CodeAnalysis.BannedApiAnalyzers
             }
         }
 
-        private IMethodSymbol? GetContainingMethod(IOperation operation)
+        private INamedTypeSymbol? GetContainingType(IOperation operation)
         {
-            // Walk up the operation tree to find the containing method
+            // Walk up the operation tree to find the containing type
             var current = operation;
             while (current != null)
             {
-                // Look for method symbol in the operation's semantic model
                 if (current.SemanticModel != null)
                 {
-                    var methodDeclaration = current.Syntax.Ancestors().FirstOrDefault(IsMethodDeclaration);
-                    if (methodDeclaration != null)
+                    // Look for the containing type symbol
+                    var typeDeclaration = current.Syntax.Ancestors().FirstOrDefault(IsTypeDeclaration);
+                    if (typeDeclaration != null)
                     {
-                        var symbol = current.SemanticModel.GetDeclaredSymbol(methodDeclaration);
-                        if (symbol is IMethodSymbol methodSymbol)
-                            return methodSymbol;
+                        var symbol = current.SemanticModel.GetDeclaredSymbol(typeDeclaration);
+                        if (symbol is INamedTypeSymbol typeSymbol)
+                            return typeSymbol;
                     }
                 }
                 current = current.Parent;
@@ -221,52 +220,12 @@ namespace Microsoft.CodeAnalysis.BannedApiAnalyzers
             return null;
         }
 
-        protected abstract bool IsMethodDeclaration(SyntaxNode node);
+        protected abstract bool IsTypeDeclaration(SyntaxNode node);
 
-        private bool IsExecuteAsyncImplementation(IMethodSymbol methodSymbol)
+        private bool IsIAsyncTaskImplementation(INamedTypeSymbol typeSymbol)
         {
-            // Check if the containing type implements IAsyncTask
-            var containingType = methodSymbol.ContainingType;
-            if (containingType == null)
-                return false;
-
             // Check if the type implements IAsyncTask interface
-            var implementsIAsyncTask = containingType.AllInterfaces.Any(i => i.ToDisplayString() == IAsyncTaskInterfaceName);
-            
-            if (!implementsIAsyncTask)
-                return false;
-
-            // For explicit interface implementations, check if this method implements IAsyncTask.ExecuteAsync
-            if (methodSymbol.ExplicitInterfaceImplementations.Any(impl =>
-                   impl.ContainingType.ToDisplayString() == IAsyncTaskInterfaceName &&
-                   impl.Name == ExecuteAsyncMethodName))
-            {
-                // Check return type (should be Task<bool>)
-                return IsTaskOfBool(methodSymbol.ReturnType);
-            }
-
-            // For implicit implementations, check method name and signature
-            if (methodSymbol.Name == ExecuteAsyncMethodName)
-            {
-                // Check return type (should be Task<bool>)
-                return IsTaskOfBool(methodSymbol.ReturnType);
-            }
-
-            return false;
-        }
-
-        private static bool IsTaskOfBool(ITypeSymbol returnType)
-        {
-            if (returnType is not INamedTypeSymbol namedType)
-                return false;
-
-            // Check if it's Task<T>
-            if (namedType.Name != "Task" || namedType.Arity != 1)
-                return false;
-
-            // Check if T is bool
-            var typeArgument = namedType.TypeArguments.FirstOrDefault();
-            return typeArgument?.SpecialType == SpecialType.System_Boolean;
+            return typeSymbol.AllInterfaces.Any(i => i.ToDisplayString() == IAsyncTaskInterfaceName);
         }
 
         private void VerifySymbol(
